@@ -1,0 +1,10 @@
+artifact_location: file:///Users/pavan/patient-readmission-risk/mlruns/317980497591077040/models/m-60a177a299db494bbdbb10eca0bda074/artifacts
+creation_timestamp: 1775084379475
+experiment_id: '317980497591077040'
+last_updated_timestamp: 1775084380924
+model_id: m-60a177a299db494bbdbb10eca0bda074
+model_type: null
+name: XGBoost_LOO
+source_run_id: 4c42023cb3164f819a56aea5bbbaa699
+status: 2
+status_message: null

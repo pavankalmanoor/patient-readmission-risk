@@ -1,0 +1,7 @@
+artifact_location: file:///Users/pavan/patient-readmission-risk/mlruns/317980497591077040
+creation_time: 1775084286343
+experiment_id: '317980497591077040'
+last_update_time: 1775084286343
+lifecycle_stage: active
+name: patient-readmission-risk
+workspace: default

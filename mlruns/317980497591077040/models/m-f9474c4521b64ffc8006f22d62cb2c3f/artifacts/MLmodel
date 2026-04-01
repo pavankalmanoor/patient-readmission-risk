@@ -1,0 +1,23 @@
+artifact_path: file:///Users/pavan/patient-readmission-risk/mlruns/317980497591077040/models/m-f9474c4521b64ffc8006f22d62cb2c3f/artifacts
+flavors:
+  python_function:
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.sklearn
+    model_path: model.pkl
+    predict_fn: predict
+    python_version: 3.13.7
+  sklearn:
+    code: null
+    pickled_model: model.pkl
+    serialization_format: cloudpickle
+    sklearn_version: 1.8.0
+    skops_trusted_types: null
+mlflow_version: 3.10.1
+model_id: m-f9474c4521b64ffc8006f22d62cb2c3f
+model_size_bytes: 197020
+model_uuid: m-f9474c4521b64ffc8006f22d62cb2c3f
+prompts: null
+run_id: d6141d83769147f4bcaa7a1a900bc8ee
+utc_time_created: '2026-04-01 22:58:07.771434'

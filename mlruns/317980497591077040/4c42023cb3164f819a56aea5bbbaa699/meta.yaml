@@ -1,0 +1,14 @@
+artifact_uri: file:///Users/pavan/patient-readmission-risk/mlruns/317980497591077040/4c42023cb3164f819a56aea5bbbaa699/artifacts
+end_time: 1775084380924
+entry_point_name: ''
+experiment_id: '317980497591077040'
+lifecycle_stage: active
+run_id: 4c42023cb3164f819a56aea5bbbaa699
+run_name: XGBoost_LOO_CV
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1775084379468
+status: 3
+tags: []
+user_id: pavan

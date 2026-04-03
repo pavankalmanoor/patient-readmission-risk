@@ -1,143 +1,257 @@
-import streamlit as st
-import pandas as pd
-import numpy as np
-import xgboost as xgb
-import shap
-import matplotlib.pyplot as plt
-from pathlib import Path
+from dataclasses import dataclass
 
-# ── Page Config ────────────────────────────────────────
-st.set_page_config(
-    page_title="Clinical Readmission Risk Dashboard",
-    page_icon="🏥",
-    layout="wide"
+import matplotlib.pyplot as plt
+import streamlit as st
+
+
+AGE_WEIGHT = 20.0
+LENGTH_OF_STAY_WEIGHT = 15.0
+COMORBIDITY_WEIGHT = 8.0
+CREATININE_WEIGHT = 5.0
+HEMOGLOBIN_WEIGHT = 3.0
+WBC_WEIGHT = 2.0
+BUN_WEIGHT = 0.5
+MEDICARE_WEIGHT = 5.0
+HIGH_RISK_THRESHOLD = 60.0
+MEDIUM_RISK_THRESHOLD = 35.0
+
+COMORBIDITY_OPTIONS = (
+    "Cardiac disease",
+    "Respiratory disease",
+    "Diabetes",
+    "Renal disease",
+    "Sepsis",
+    "Hypertension",
+    "Cancer",
 )
 
-st.title("🏥 30-Day Hospital Readmission Risk Dashboard")
-st.markdown("**MIMIC-III ICU Cohort | Clinical Decision Support Tool**")
-st.warning("⚠️ Research prototype only — not for clinical use")
+BENCHMARKS = (
+    ("Overall readmission rate", "8.5%"),
+    ("Male readmission rate", "12.9%"),
+    ("Female readmission rate", "3.4%"),
+    ("Highest-risk age group", "45-60 (20%)"),
+)
 
-# ── Sidebar — Patient Input ────────────────────────────
-st.sidebar.header("📋 Patient Information")
+RISK_COLORS = {
+    "High": "#c0392b",
+    "Moderate": "#d68910",
+    "Low": "#1e8449",
+}
 
-age = st.sidebar.slider("Age", 18, 89, 65)
-gender = st.sidebar.selectbox("Gender", ["Male", "Female"])
-los_days = st.sidebar.slider("Length of Stay (days)", 1, 30, 5)
-insurance = st.sidebar.selectbox("Insurance", ["Medicare", "Private", "Medicaid", "Government"])
 
-st.sidebar.header("🔬 Comorbidities")
-has_cardiac      = st.sidebar.checkbox("Cardiac Disease")
-has_respiratory  = st.sidebar.checkbox("Respiratory Disease")
-has_diabetes     = st.sidebar.checkbox("Diabetes")
-has_renal        = st.sidebar.checkbox("Renal Disease")
-has_sepsis       = st.sidebar.checkbox("Sepsis")
-has_hypertension = st.sidebar.checkbox("Hypertension")
-has_cancer       = st.sidebar.checkbox("Cancer")
+@dataclass(frozen=True)
+class PatientProfile:
+    age: int
+    gender: str
+    length_of_stay: int
+    insurance: str
+    creatinine: float
+    hemoglobin: float
+    glucose: int
+    sodium: int
+    wbc: float
+    bun: int
+    conditions: tuple[str, ...]
 
-st.sidebar.header("🧪 Lab Values")
-creatinine = st.sidebar.slider("Creatinine (mg/dL)", 0.5, 10.0, 1.2)
-hemoglobin = st.sidebar.slider("Hemoglobin (g/dL)", 5.0, 18.0, 12.0)
-glucose    = st.sidebar.slider("Glucose (mg/dL)", 60, 400, 120)
-sodium     = st.sidebar.slider("Sodium (mEq/L)", 120, 160, 140)
-wbc        = st.sidebar.slider("WBC (K/uL)", 1.0, 30.0, 8.0)
-bun        = st.sidebar.slider("BUN (mg/dL)", 5, 100, 20)
 
-# ── Compute Risk Score ─────────────────────────────────
-comorbidity_count = sum([has_cardiac, has_respiratory, has_diabetes,
-                         has_renal, has_sepsis, has_hypertension, has_cancer])
+def calculate_risk_components(profile: PatientProfile) -> dict[str, float]:
+    components = {
+        "Age": min(profile.age / 89, 1.0) * AGE_WEIGHT,
+        "Length of stay": min(profile.length_of_stay / 30, 1.0) * LENGTH_OF_STAY_WEIGHT,
+        "Comorbidities": len(profile.conditions) * COMORBIDITY_WEIGHT,
+        "Creatinine": max(0.0, profile.creatinine - 1.2) * CREATININE_WEIGHT,
+        "Hemoglobin": max(0.0, 12.0 - profile.hemoglobin) * HEMOGLOBIN_WEIGHT,
+        "White blood cell count": max(0.0, profile.wbc - 11.0) * WBC_WEIGHT,
+        "BUN": max(0.0, profile.bun - 25) * BUN_WEIGHT,
+        "Insurance": MEDICARE_WEIGHT if profile.insurance == "Medicare" else 0.0,
+    }
+    return {name: round(value, 1) for name, value in components.items() if value > 0}
 
-# Simple risk score (rule-based for demo)
-risk_score = 0.0
-risk_score += min(age / 89, 1.0) * 20
-risk_score += min(los_days / 30, 1.0) * 15
-risk_score += comorbidity_count * 8
-risk_score += max(0, creatinine - 1.2) * 5
-risk_score += max(0, 12 - hemoglobin) * 3
-risk_score += max(0, wbc - 11) * 2
-risk_score += max(0, bun - 25) * 0.5
-risk_score += (1 if insurance == "Medicare" else 0) * 5
-risk_score = min(risk_score, 100)
 
-# ── Main Dashboard ─────────────────────────────────────
-col1, col2, col3 = st.columns(3)
+def total_risk_score(components: dict[str, float]) -> float:
+    return min(round(sum(components.values()), 1), 100.0)
 
-with col1:
-    color = "🔴" if risk_score >= 60 else "🟡" if risk_score >= 35 else "🟢"
-    st.metric("Readmission Risk Score", f"{risk_score:.1f}/100")
-    tier = "HIGH RISK" if risk_score >= 60 else "MEDIUM RISK" if risk_score >= 35 else "LOW RISK"
-    st.markdown(f"### {color} {tier}")
 
-with col2:
-    st.metric("Comorbidity Burden", f"{comorbidity_count} conditions")
-    st.metric("Length of Stay", f"{los_days} days")
+def risk_tier(score: float) -> str:
+    if score >= HIGH_RISK_THRESHOLD:
+        return "High"
+    if score >= MEDIUM_RISK_THRESHOLD:
+        return "Moderate"
+    return "Low"
 
-with col3:
-    st.metric("Age Group Risk", 
-              "High" if 45 <= age <= 60 else "Moderate" if age > 60 else "Lower")
-    st.metric("Creatinine", f"{creatinine} mg/dL",
-              delta="⚠️ Elevated" if creatinine > 1.5 else "Normal")
 
-st.divider()
+def age_group_risk_label(age: int) -> str:
+    if 45 <= age <= 60:
+        return "High"
+    if age > 60:
+        return "Moderate"
+    return "Lower"
 
-# ── Risk Factors ───────────────────────────────────────
-col4, col5 = st.columns(2)
 
-with col4:
-    st.subheader("🔍 Top Risk Factors")
-    risk_factors = []
-    if creatinine > 1.5:
-        risk_factors.append(("🔴 Elevated Creatinine", "Kidney dysfunction increases readmission risk"))
-    if comorbidity_count >= 3:
-        risk_factors.append(("🔴 High Comorbidity Burden", f"{comorbidity_count} conditions — complex care needs"))
-    if los_days > 7:
-        risk_factors.append(("🟡 Extended Hospital Stay", "Longer stays indicate higher illness severity"))
-    if hemoglobin < 10:
-        risk_factors.append(("🟡 Low Hemoglobin", "Anemia reduces recovery capacity"))
-    if wbc > 11:
-        risk_factors.append(("🟡 Elevated WBC", "Suggests active infection or inflammation"))
-    if age >= 45 and age <= 60:
-        risk_factors.append(("🟡 Peak Risk Age Group", "45-60 shows highest readmission rate in cohort"))
-    if has_renal:
-        risk_factors.append(("🟡 Renal Disease", "Chronic kidney disease — frequent readmission driver"))
-    if not risk_factors:
-        risk_factors.append(("🟢 No major risk factors identified", "Continue standard care protocols"))
+def build_risk_factors(profile: PatientProfile) -> list[tuple[str, str]]:
+    factors: list[tuple[str, str]] = []
 
-    for factor, explanation in risk_factors:
+    if profile.creatinine > 1.5:
+        factors.append(
+            ("Elevated creatinine", "Kidney dysfunction is associated with higher readmission risk.")
+        )
+    if len(profile.conditions) >= 3:
+        factors.append(
+            (
+                "High comorbidity burden",
+                f"{len(profile.conditions)} documented conditions suggest more complex post-discharge care needs.",
+            )
+        )
+    if profile.length_of_stay > 7:
+        factors.append(
+            ("Extended length of stay", "Longer admissions often reflect higher severity of illness.")
+        )
+    if profile.hemoglobin < 10.0:
+        factors.append(("Low hemoglobin", "Anemia may slow recovery after discharge."))
+    if profile.wbc > 11.0:
+        factors.append(
+            ("Elevated white blood cell count", "This may indicate active infection or inflammation.")
+        )
+    if 45 <= profile.age <= 60:
+        factors.append(
+            ("Peak-risk age group", "Patients aged 45 to 60 had the highest observed risk in the demo cohort.")
+        )
+    if "Renal disease" in profile.conditions:
+        factors.append(
+            ("Renal disease", "Chronic kidney disease is a common contributor to readmission risk.")
+        )
+
+    if not factors:
+        return [("No major risk factors identified", "Current inputs do not indicate elevated risk drivers.")]
+    return factors
+
+
+def render_sidebar() -> PatientProfile:
+    st.sidebar.header("Patient Information")
+    age = st.sidebar.slider("Age", min_value=18, max_value=89, value=65)
+    gender = st.sidebar.selectbox("Gender", ["Male", "Female"])
+    length_of_stay = st.sidebar.slider("Length of stay (days)", min_value=1, max_value=30, value=5)
+    insurance = st.sidebar.selectbox(
+        "Insurance",
+        ["Medicare", "Private", "Medicaid", "Government"],
+    )
+
+    st.sidebar.header("Comorbidities")
+    selected_conditions = tuple(
+        option for option in COMORBIDITY_OPTIONS if st.sidebar.checkbox(option)
+    )
+
+    st.sidebar.header("Laboratory Values")
+    creatinine = st.sidebar.slider("Creatinine (mg/dL)", min_value=0.5, max_value=10.0, value=1.2)
+    hemoglobin = st.sidebar.slider("Hemoglobin (g/dL)", min_value=5.0, max_value=18.0, value=12.0)
+    glucose = st.sidebar.slider("Glucose (mg/dL)", min_value=60, max_value=400, value=120)
+    sodium = st.sidebar.slider("Sodium (mEq/L)", min_value=120, max_value=160, value=140)
+    wbc = st.sidebar.slider("White blood cell count (K/uL)", min_value=1.0, max_value=30.0, value=8.0)
+    bun = st.sidebar.slider("BUN (mg/dL)", min_value=5, max_value=100, value=20)
+
+    return PatientProfile(
+        age=age,
+        gender=gender,
+        length_of_stay=length_of_stay,
+        insurance=insurance,
+        creatinine=creatinine,
+        hemoglobin=hemoglobin,
+        glucose=glucose,
+        sodium=sodium,
+        wbc=wbc,
+        bun=bun,
+        conditions=selected_conditions,
+    )
+
+
+def render_summary(profile: PatientProfile, score: float, tier: str) -> None:
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.metric("Readmission risk score", f"{score:.1f}/100")
+        st.markdown(
+            f"<p style='color:{RISK_COLORS[tier]}; font-size:1.2rem; font-weight:600;'>"
+            f"{tier} risk</p>",
+            unsafe_allow_html=True,
+        )
+
+    with col2:
+        st.metric("Comorbidity burden", f"{len(profile.conditions)} conditions")
+        st.metric("Length of stay", f"{profile.length_of_stay} days")
+
+    with col3:
+        st.metric("Age group risk", age_group_risk_label(profile.age))
+        creatinine_status = "Elevated" if profile.creatinine > 1.5 else "Normal"
+        st.metric("Creatinine", f"{profile.creatinine:.1f} mg/dL", delta=creatinine_status)
+
+
+def render_risk_factors(profile: PatientProfile) -> None:
+    st.subheader("Top risk factors")
+    for factor, explanation in build_risk_factors(profile):
         st.markdown(f"**{factor}**")
         st.caption(explanation)
 
-with col5:
-    st.subheader("📊 Risk Score Breakdown")
-    components = {
-        'Age': min(age/89, 1.0) * 20,
-        'Length of Stay': min(los_days/30, 1.0) * 15,
-        'Comorbidities': comorbidity_count * 8,
-        'Creatinine': max(0, creatinine-1.2) * 5,
-        'Hemoglobin': max(0, 12-hemoglobin) * 3,
-        'WBC': max(0, wbc-11) * 2,
-        'BUN': max(0, bun-25) * 0.5,
-    }
-    components = {k: round(v, 1) for k, v in components.items() if v > 0}
+
+def render_risk_breakdown(components: dict[str, float]) -> None:
+    st.subheader("Risk score breakdown")
+
+    if not components:
+        st.info("No positive risk contributions were generated from the current inputs.")
+        return
 
     fig, ax = plt.subplots(figsize=(6, 4))
-    colors = ['#e74c3c' if v > 10 else '#f39c12' if v > 5 else '#2ecc71'
-              for v in components.values()]
-    ax.barh(list(components.keys()), list(components.values()),
-            color=colors, edgecolor='black')
-    ax.set_xlabel('Risk Contribution')
-    ax.set_title('Risk Score Components')
+    bar_colors = [
+        RISK_COLORS["High"] if value > 10 else RISK_COLORS["Moderate"] if value > 5 else RISK_COLORS["Low"]
+        for value in components.values()
+    ]
+    ax.barh(list(components.keys()), list(components.values()), color=bar_colors, edgecolor="black")
+    ax.set_xlabel("Risk contribution")
+    ax.set_title("Risk component contribution")
     plt.tight_layout()
     st.pyplot(fig)
+    plt.close(fig)
 
-st.divider()
 
-# ── Population Benchmarks ──────────────────────────────
-st.subheader("📈 Population Benchmarks (MIMIC-III Cohort)")
+def render_benchmarks() -> None:
+    st.subheader("Population benchmarks")
+    columns = st.columns(len(BENCHMARKS))
+    for column, (label, value) in zip(columns, BENCHMARKS):
+        column.metric(label, value)
+    st.caption(
+        "Source: MIMIC-III Clinical Database Demo (n=129 ICU patients), MIT Laboratory for Computational Physiology."
+    )
 
-col6, col7, col8, col9 = st.columns(4)
-col6.metric("Overall Readmission Rate", "8.5%")
-col7.metric("Male Readmission Rate", "12.9%")
-col8.metric("Female Readmission Rate", "3.4%")
-col9.metric("Peak Risk Age Group", "45-60 (20%)")
 
-st.caption("Source: MIMIC-III Clinical Database Demo (n=129 ICU patients) | MIT Laboratory for Computational Physiology")
+def main() -> None:
+    st.set_page_config(
+        page_title="Patient Readmission Risk Dashboard",
+        layout="wide",
+    )
+
+    st.title("30-Day Hospital Readmission Risk Dashboard")
+    st.markdown("Clinical decision-support prototype based on the MIMIC-III ICU demo cohort.")
+    st.info(
+        "This dashboard is a research prototype for portfolio and educational use. "
+        "It is not intended for clinical decision-making."
+    )
+
+    profile = render_sidebar()
+    components = calculate_risk_components(profile)
+    score = total_risk_score(components)
+    tier = risk_tier(score)
+
+    render_summary(profile, score, tier)
+    st.divider()
+
+    col1, col2 = st.columns(2)
+    with col1:
+        render_risk_factors(profile)
+    with col2:
+        render_risk_breakdown(components)
+
+    st.divider()
+    render_benchmarks()
+
+
+if __name__ == "__main__":
+    main()

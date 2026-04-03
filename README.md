@@ -1,174 +1,127 @@
-# 🏥 Patient Readmission Risk & Clinical Dashboard
-> Clinical data science pipeline predicting 30-day hospital readmission using MIMIC-III ICU data, with fairness auditing and an interactive Streamlit dashboard.
+# Patient Readmission Risk Dashboard
 
-**Dataset:** MIMIC-III Clinical Database Demo — MIT Laboratory for Computational Physiology  
-**Citation:** Johnson et al. (2016). MIMIC-III, a freely accessible critical care database. *Scientific Data*, 3, 160035.
+Clinical data science project for estimating 30-day hospital readmission risk from the MIMIC-III Clinical Database Demo. The repository combines exploratory analysis, feature engineering, interpretable risk scoring, fairness analysis, and a Streamlit dashboard for presenting patient-level predictions.
 
----
+## Overview
 
-## 🎯 Project Overview
+Hospital readmission is a widely tracked quality metric in US healthcare. This project explores how demographic variables, comorbidity burden, and laboratory measurements can be used to estimate short-term readmission risk in an ICU cohort.
 
-Hospital readmission within 30 days is a key quality metric tracked by the Centers for Medicare & Medicaid Services (CMS). Hospitals face financial penalties for excess readmissions. This project builds an end-to-end clinical risk scoring system using real de-identified ICU data.
+The repository is designed as a portfolio project rather than a deployable medical device. It emphasizes:
 
-**Pipeline:**
+- end-to-end analytical workflow
+- interpretable feature design
+- fairness-oriented model review
+- clear presentation through an interactive dashboard
+
+## Workflow
+
+```text
+MIMIC-III clinical tables
+  -> feature engineering
+  -> readmission risk modeling
+  -> SHAP-based interpretation
+  -> subgroup fairness analysis
+  -> Streamlit dashboard
 ```
-MIMIC-III EHR Data (SQL tables)
-        ↓
-Feature Engineering
-(Demographics + ICD-9 Comorbidities + 9 Lab Biomarkers)
-        ↓
-XGBoost + Leave-One-Out CV
-        ↓
-SHAP Explainability + Fairness Audit
-        ↓
-Streamlit Clinical Risk Dashboard
-```
 
----
+## Key Results
 
-## 📊 Key Results
+### Feature Importance
+![SHAP feature importance](data/shap_readmission.png)
 
-### SHAP Feature Importance
-![SHAP Plot](data/shap_readmission.png)
-
-### Clinical Fairness Audit
-![Fairness Analysis](data/fairness_analysis.png)
+### Fairness Analysis
+![Fairness analysis](data/fairness_analysis.png)
 
 ### Model Evaluation
-![Confusion Matrix](data/confusion_matrix.png)
+![Confusion matrix](data/confusion_matrix.png)
 
----
+## Clinical Findings
 
-## 🔍 Key Clinical Findings
+| Finding | Interpretation |
+| --- | --- |
+| Hemoglobin is the strongest predictor | Discharge anemia may be associated with impaired recovery and follow-up risk |
+| Male patients show higher readmission rates than female patients in the demo cohort | Suggests a need to review discharge planning differences by subgroup |
+| Patients aged 45 to 60 show the highest observed readmission rate | Indicates elevated risk in a group that may be under-monitored |
+| Patients with multiple comorbidities show the highest risk | Supports comorbidity burden as a practical clinical signal |
+| Readmission patterns vary by insurance category | Highlights the importance of socioeconomic context in post-discharge care |
 
-| Finding | Clinical Implication |
-|---|---|
-| **Hemoglobin** is top predictor | Anemia at discharge → impaired recovery → readmission |
-| **Males 12.9% vs Females 3.4%** readmission | Gender disparity in discharge planning |
-| **45-60 age group highest risk (20%)** | Counter-intuitive — mid-age patients underserved |
-| **3-4 comorbidities = peak risk (13-14%)** | Charlson Index validated as risk tool |
-| **Private insurance 12.5% vs Medicaid 0%** | Socioeconomic complexity in post-discharge support |
+## Repository Structure
 
----
+```text
+patient-readmission-risk/
+|-- data/
+|   |-- mimic-iii-clinical-database-demo-1.4.zip
+|   |-- shap_readmission.png
+|   |-- fairness_analysis.png
+|   `-- confusion_matrix.png
+|-- notebooks/
+|   `-- 01_readmission_pipeline.ipynb
+|-- src/
+|   `-- app.py
+|-- requirements.txt
+`-- README.md
+```
 
-## 🛠️ Tech Stack
+## Technical Stack
 
 | Layer | Tools |
-|---|---|
-| **Data** | MIMIC-III (real de-identified ICU EHR data) |
-| **Feature Engineering** | ICD-9 comorbidity mapping, lab biomarker extraction, Charlson Index proxy |
-| **Modeling** | XGBoost, Leave-One-Out CV (clinically appropriate for small cohorts) |
-| **Explainability** | SHAP (TreeExplainer) |
-| **Fairness** | Demographic subgroup audit (gender, insurance, age, ethnicity) |
-| **Experiment Tracking** | MLflow |
-| **Dashboard** | Streamlit |
-| **Languages** | Python, SQL |
+| --- | --- |
+| Data source | MIMIC-III Clinical Database Demo |
+| Modeling | XGBoost, scikit-learn |
+| Explainability | SHAP |
+| Experiment tracking | MLflow |
+| Application layer | Streamlit |
+| Languages | Python, SQL |
 
----
-
-## 🚀 Quick Start
+## Installation
 
 ```bash
-git clone https://github.com/pavankalmanoor/patient-readmission-risk
+git clone https://github.com/pavankalmanoor/patient-readmission-risk.git
 cd patient-readmission-risk
-python3 -m venv venv
-source venv/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
+```
 
-# Run notebook
-jupyter notebook notebooks/01_readmission_pipeline.ipynb
+## Running the Dashboard
 
-# Run dashboard
+```bash
 streamlit run src/app.py
 ```
 
----
+## Methodology Notes
 
-## 📁 Project Structure
+### Why leave-one-out cross-validation
 
-```
-patient-readmission-risk/
-├── data/
-│   ├── mimic-iii-clinical-database-demo-1.4/  # MIMIC-III CSV tables
-│   ├── shap_readmission.png                    # SHAP feature importance
-│   ├── fairness_analysis.png                   # Demographic fairness audit
-│   └── confusion_matrix.png                    # Model evaluation
-├── notebooks/
-│   └── 01_readmission_pipeline.ipynb          # Full analysis pipeline
-├── src/
-│   └── app.py                                  # Streamlit dashboard
-├── mlruns/                                     # MLflow experiment logs
-├── requirements.txt
-└── README.md
-```
+The demo cohort is small, with only 129 patients and 11 positive readmission events. A traditional train-test split would leave too few positive examples in the test set to support stable evaluation, so leave-one-out cross-validation is a more defensible choice for the dataset size.
 
----
+### Why gradient boosting instead of deep learning
 
-## ⚙️ Feature Engineering
+For structured tabular clinical data, gradient-boosted trees are often more practical than deep learning. They handle missingness well, work effectively with modest dataset sizes, and integrate naturally with SHAP for interpretation.
 
-**42 features across 3 categories:**
+### Why recall matters
 
-**Demographic (2):** Age (safely calculated for MIMIC date shifts), Length of Stay
+In the readmission setting, false negatives can be costly because they represent high-risk patients who are not identified for follow-up. For that reason, the project prioritizes recall over a strictly precision-optimized threshold.
 
-**Comorbidity (9) — ICD-9 based Charlson Index proxy:**
-- Cardiac disease, Respiratory disease, Diabetes
-- Renal disease, Sepsis, Hypertension, Cancer
-- Total comorbidity count, Number of diagnoses
+## Fairness Review
 
-**Lab Biomarkers (27) — mean/min/max per admission:**
-- Creatinine (kidney function)
-- Hemoglobin (anemia marker)
-- White Blood Cell count (infection)
-- BUN (kidney stress)
-- Glucose, Sodium, Potassium, Bicarbonate, Platelet
+The analysis includes subgroup review across gender, age, insurance, and ethnicity. This is useful for identifying disparities, but it is not sufficient for deployment approval. Any production use would require a larger dataset, stronger calibration testing, and formal clinical governance.
 
----
-
-## ⚖️ Fairness & Bias Audit
-
-Model performance audited across 4 demographic dimensions following CMS guidelines:
-
-| Dimension | Highest Risk Group | Rate |
-|---|---|---|
-| Gender | Male | 12.9% |
-| Age | 45-60 | 20.0% |
-| Insurance | Private | 12.5% |
-| Ethnicity | Black | 14.3% |
-
-**Recommendation:** Demographic parity audit required before any clinical deployment.
-
----
-
-## 📋 Methodology Notes
-
-**Why LOO-CV over train/test split?**  
-With only 11 readmission events in 129 patients, a standard 80/20 split yields fewer than 3 positive cases in the test set — statistically unreliable. Leave-One-Out CV is the standard approach for small clinical cohorts.
-
-**Why XGBoost over deep learning?**  
-No evidence that deep learning outperforms gradient boosting on structured tabular EHR data. XGBoost is interpretable via SHAP, handles missing values natively, and is the industry standard for clinical decision support.
-
-**Why optimize for recall?**  
-In healthcare, false negatives (missing a high-risk patient) are more costly than false positives. Threshold set at 0.3 to prioritize recall over precision.
-
----
-
-## ⚠️ Limitations
+## Limitations
 
 | Limitation | Impact |
-|---|---|
-| n=129 (demo subset) | Full MIMIC-III has 40,000+ patients |
-| 11 readmission events | Insufficient for robust prediction |
-| Single institution (BIDMC) | Limited generalizability |
-| 2001-2012 data | May not reflect current practice |
+| --- | --- |
+| Demo cohort of 129 patients | Results are directionally useful but not production-ready |
+| Only 11 readmission events | Limits statistical confidence and model stability |
+| Single-institution source data | Reduces generalizability |
+| Historical data from 2001 to 2012 | May not reflect current practice patterns |
 
-Production deployment requires full MIMIC-III, IRB approval, HIPAA compliance, and prospective clinical validation.
+This repository should be understood as a research and portfolio artifact. Clinical deployment would require expanded data access, prospective validation, regulatory review, and privacy-compliant implementation.
 
----
+## Citation
 
-## 📚 Citation
-
-```
-Johnson, A., Pollard, T., & Mark, R. (2019). 
-MIMIC-III Clinical Database Demo (version 1.4). 
+```text
+Johnson, A., Pollard, T., and Mark, R. (2019).
+MIMIC-III Clinical Database Demo (version 1.4).
 PhysioNet. https://doi.org/10.13026/C2HM2Q
 ```
